@@ -23,24 +23,40 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install pytest-qt
+          # Ensure PyQt5 is available on the runner for GUI tests
+          pip install PyQt5
       - name: Run tests
         run: pytest -q
       - name: Build application (non-interactive)
         shell: powershell
         run: |
           python -u build_complete_solution.py
+      - name: Locate portable ZIP
+        id: findzip
+        shell: powershell
+        run: |
+          Write-Output "Searching for portable zip..."
+          $zip = Get-ChildItem -Path . -Filter "VideoDownloader_Portable_*.zip" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($zip) { Write-Output "Found $($zip.FullName)"; echo "zip=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append } else { Write-Output "No portable ZIP found"; echo "zip=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append }
+
       - name: Upload portable artifact
+        if: steps.findzip.outputs.zip != ''
         uses: actions/upload-artifact@v4
         with:
           name: portable-zip
-          path: VideoDownloader_Portable_v1.0.0.zip
-      - name: Commit portable artifact back to branch
+          path: ${{ steps.findzip.outputs.zip }}
+
+      - name: Extract EXE from portable ZIP (optional)
+        if: steps.findzip.outputs.zip != ''
         shell: powershell
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VideoDownloader_Portable_v1.0.0.zip || Write-Output "No artifact to add"
-          if (git status --porcelain) { git commit -m "ci: add portable build artifact" } else { Write-Output "No changes to commit" }
-          git push origin HEAD
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          $zip = '${{ steps.findzip.outputs.zip }}'
+          Write-Output "Extracting $zip"
+          Expand-Archive -LiteralPath $zip -DestinationPath portable_extracted -Force
+          # attempt to find an exe inside the extracted folder
+          $exe = Get-ChildItem -Path portable_extracted -Filter *.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($exe) {
+            Write-Output "Found exe: $($exe.FullName)"
+            Copy-Item -Path $exe.FullName -Destination (Join-Path $PWD $exe.Name) -Force
+            Write-Output "Copied $($exe.Name) to repo root"
+          } else { Write-Output "No exe found inside portable zip" }

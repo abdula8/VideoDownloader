@@ -1,5 +1,13 @@
 __Pycache__/
 Youtube_Downloads/
+build/
+dist*/
+installer/
+VideoDownloader_Portable/
 
 
+*.zip
 commit-github.yaml
+VideoDownloader_Portable_v1.0.0.zip
+VideoDownloader_Professional_Setup_.exe
+VideoDownloader_Professional_Setup.exe

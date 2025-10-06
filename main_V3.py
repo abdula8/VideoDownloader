@@ -20,10 +20,21 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QScrollArea, QWidget, QGroupBox, QButtonGroup, QFrame)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont
-from setup_helper import full_setup
-# import cc_download.main as cc
+# Converter dialogs
+from converter_tool import BasicConverterDialog, AdvancedConverterDialog
 
-full_setup()  # Ensure environment is ready
+# from setup_helper import full_setup
+# # import cc_download.main as cc
+
+# # Only run environment setup when running in development (not a frozen executable)
+# try:
+#     is_frozen = getattr(sys, 'frozen', False)
+# except Exception:
+#     is_frozen = False
+
+# if not is_frozen:
+#     # Ensure environment is ready during development/test runs
+#     full_setup()
 
 from yt_dlp import YoutubeDL
 from datetime import datetime
@@ -31,6 +42,7 @@ import logging
 import re
 import requests
 import subprocess
+import json
 
 from pathlib import Path
 file_path = Path(__file__).resolve()
@@ -51,6 +63,7 @@ DOWNLOAD_DIR = DEFAULT_DOWNLOAD_DIR
 AUDIO_COPY_DIR = os.path.join(DOWNLOAD_DIR, "audio_only")
 LOG_FILE = check_os("youtube_downloader.log")
 ARCHIVE_FILE = os.path.join(DOWNLOAD_DIR, 'downloaded_videos.txt')
+SETTINGS_FILE = check_os('settings.json')
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(AUDIO_COPY_DIR, exist_ok=True)
@@ -146,6 +159,10 @@ class YouTubeDownloader(QMainWindow):
         # Track running threads to prevent premature destruction
         self.threads = set()
 
+        # UI/theme settings
+        self.settings = {}
+        self._load_settings()
+
         # Video qualities and audio
         self.video_qualities = ['best', 'bestvideo[height<=1080]+bestaudio', 'bestvideo[height<=720]+bestaudio', 'worst']
         self.audio_qualities = ['bestaudio', 'bestaudio[ext=mp3]', 'bestaudio/best']
@@ -164,6 +181,63 @@ class YouTubeDownloader(QMainWindow):
 
         self.setup_ui()
 
+    def _load_settings(self):
+        """Load user settings (JSON) if present."""
+        try:
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                    self.settings = json.load(f)
+            else:
+                self.settings = {'theme': 'light'}
+        except Exception:
+            self.settings = {'theme': 'light'}
+        # Apply the theme now if setup_ui has not yet created actions, apply later in setup_ui
+        try:
+            self._apply_theme(self.settings.get('theme', 'light'))
+        except Exception:
+            pass
+
+    def _save_settings(self):
+        """Persist settings to disk."""
+        try:
+            with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.settings or {}, f, indent=2)
+        except Exception:
+            logging.exception('Failed to save settings')
+
+    def _set_and_save_theme(self, theme_name: str):
+        """Set theme in memory, persist it, and apply immediately."""
+        if theme_name not in ('light', 'dark'):
+            return
+        self.settings['theme'] = theme_name
+        self._save_settings()
+        self._apply_theme(theme_name)
+
+    def _apply_theme(self, theme_name: str):
+        """Apply a basic light/dark stylesheet to the application and update menu checks."""
+        if theme_name == 'dark':
+            dark_qss = """
+            QWidget { background-color: #2e2e2e; color: #e0e0e0; }
+            QLineEdit, QTextEdit, QListWidget, QComboBox, QSpinBox { background-color: #3a3a3a; color: #e0e0e0; }
+            QPushButton { background-color: #4b6eaf; color: white; }
+            QProgressBar { background-color: #444; color: #e0e0e0; }
+            """
+            QApplication.instance().setStyleSheet(dark_qss)
+            # Update action checks if available
+            try:
+                self.dark_theme_action.setChecked(True)
+                self.light_theme_action.setChecked(False)
+            except Exception:
+                pass
+        else:
+            # Light theme: clear stylesheet
+            QApplication.instance().setStyleSheet("")
+            try:
+                self.light_theme_action.setChecked(True)
+                self.dark_theme_action.setChecked(False)
+            except Exception:
+                pass
+
     def _track_thread(self, worker):
         self.threads.add(worker)
         worker.finished_signal.connect(lambda *_: self.threads.discard(worker))
@@ -178,6 +252,54 @@ class YouTubeDownloader(QMainWindow):
         event.accept()
 
     def setup_ui(self):
+        # --- Menu Bar ---
+        menubar = self.menuBar()
+
+        # Generic menus that currently show a 'Coming soon' message
+        file_menu = menubar.addMenu("File")
+        edit_menu = menubar.addMenu("Edit")
+        tools_menu = menubar.addMenu("Tools")
+        help_menu = menubar.addMenu("Help")
+
+        # Simple actions for the generic menus
+        file_action = file_menu.addAction("Open")
+        file_action.triggered.connect(lambda: self._show_coming_soon('Open'))
+        exit_action = file_menu.addAction("Exit")
+        exit_action.triggered.connect(self.close)
+
+        # Settings submenu including theme selection
+        settings_menu = edit_menu.addMenu("Settings")
+
+        # Theme actions (Light / Dark)
+        theme_group = QtWidgets.QActionGroup(self)
+        self.light_theme_action = settings_menu.addAction("Light Theme")
+        self.light_theme_action.setCheckable(True)
+        self.dark_theme_action = settings_menu.addAction("Dark Theme")
+        self.dark_theme_action.setCheckable(True)
+        theme_group.addAction(self.light_theme_action)
+        theme_group.addAction(self.dark_theme_action)
+
+        # Connect theme actions
+        self.light_theme_action.triggered.connect(lambda: self._set_and_save_theme('light'))
+        self.dark_theme_action.triggered.connect(lambda: self._set_and_save_theme('dark'))
+
+        # A simple Preferences placeholder remains for other settings
+        pref_action = settings_menu.addAction("Preferences...")
+        pref_action.triggered.connect(lambda: self._show_coming_soon('Preferences'))
+
+        tools_action = tools_menu.addAction("Tools")
+        tools_action.triggered.connect(lambda: self._show_coming_soon('Tools'))
+
+        help_action = help_menu.addAction("About")
+        help_action.triggered.connect(lambda: self._show_coming_soon('About'))
+
+        # Convert menu with two real submenus that open converter dialogs
+        convert_menu = menubar.addMenu("Convert")
+        basic_convert_action = convert_menu.addAction("Basic Convert")
+        basic_convert_action.triggered.connect(self._open_basic_converter)
+        advanced_convert_action = convert_menu.addAction("Advanced Converter")
+        advanced_convert_action.triggered.connect(self._open_advanced_converter)
+
         # Batch download button
         batch_btn = QPushButton("Batch Download from File")
         batch_btn.clicked.connect(self.batch_download_from_file)
@@ -289,6 +411,28 @@ class YouTubeDownloader(QMainWindow):
         self.convert_all_btn.hide()
         self.content_layout.addWidget(self.convert_selected_btn)
         self.content_layout.addWidget(self.convert_all_btn)
+
+    def _show_coming_soon(self, name: str):
+        """Show a standardized 'Coming soon' message for placeholder menu items."""
+        self.show_message(name, f"{name} - Coming soon.")
+
+    def _open_basic_converter(self):
+        """Open the basic converter dialog from converter_tool.py"""
+        try:
+            dlg = BasicConverterDialog(self)
+            dlg.exec_()
+        except Exception as e:
+            logging.exception('Failed to open BasicConverterDialog: %s', e)
+            self.show_message('Error', f'Could not open Basic Converter:\n{e}', QMessageBox.Critical)
+
+    def _open_advanced_converter(self):
+        """Open the advanced converter dialog from converter_tool.py"""
+        try:
+            dlg = AdvancedConverterDialog(self)
+            dlg.exec_()
+        except Exception as e:
+            logging.exception('Failed to open AdvancedConverterDialog: %s', e)
+            self.show_message('Error', f'Could not open Advanced Converter:\n{e}', QMessageBox.Critical)
 
     def _populate_videos(self, data):
         titles, entries = data

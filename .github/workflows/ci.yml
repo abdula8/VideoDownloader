@@ -3,12 +3,14 @@ name: CI
 on:
   push: {}
   pull_request: {}
+  workflow_dispatch: {}
 
 permissions:
   contents: write
 
 jobs:
   tests-windows:
+    name: Run tests (Windows)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,14 +25,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install pytest-qt
-          # Ensure PyQt5 is available on the runner for GUI tests
-          pip install PyQt5
+          # Ensure PyQt5 is available on the runner for GUI tests (prefer wheel)
+          pip install --only-binary=:all: PyQt5==5.15.9 || pip install PyQt5
       - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: pytest -q
-      - name: Build application (non-interactive)
-        shell: powershell
+
+  build-windows:
+    name: Build & package (Windows) — main only
+    runs-on: windows-latest
+    needs: tests-windows
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install build dependencies
         run: |
-          python -u build_complete_solution.py
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+      - name: Run BUILD_COMPLETE.bat non-interactively
+        shell: cmd
+        run: |
+          echo n | BUILD_COMPLETE.bat
       - name: Locate portable ZIP
         id: findzip
         shell: powershell
@@ -60,3 +82,30 @@ jobs:
             Copy-Item -Path $exe.FullName -Destination (Join-Path $PWD $exe.Name) -Force
             Write-Output "Copied $($exe.Name) to repo root"
           } else { Write-Output "No exe found inside portable zip" }
+
+      - name: Commit built EXE to repository root (optional)
+        if: steps.findzip.outputs.zip != ''
+        shell: powershell
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          # Find an exe in repo root (or copied there by previous step)
+          $exe = Get-ChildItem -Path $PWD -Filter *.exe -Recurse | Where-Object { $_.FullName -notlike "*\\installer\\*" } | Select-Object -First 1
+          if (-not $exe) { Write-Output "No exe found to commit"; exit 0 }
+
+          Write-Output "Preparing to commit $($exe.FullName)"
+          git config user.name "$env:GIT_AUTHOR_NAME"
+          git config user.email "$env:GIT_AUTHOR_EMAIL"
+
+          # Add and commit with [skip ci] to avoid retriggering workflows
+          git add --force "$($exe.FullName)"
+          $msg = "ci: add built exe $($exe.Name) [skip ci]"
+          git commit -m $msg || Write-Output "No changes to commit"
+
+          # Push back to the branch that triggered the workflow
+          $branch = "${{ github.ref_name }}"
+          if (-not $branch) { $branch = "${{ github.head_ref }}" }
+          if (-not $branch) { $branch = 'main' }
+          Write-Output "Pushing to branch $branch"
+          git push origin HEAD:$branch

@@ -1,3 +1,20 @@
 2025-10-04 11:36:18,264 - WARNING - q_combo does not exist when update_quality_options called
 2025-10-05 13:45:48,128 - WARNING - q_combo does not exist when update_quality_options called
 2025-10-05 15:13:11,404 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 08:19:52,940 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 08:29:20,699 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 08:47:01,339 - ERROR - Download failed for '\u4e09\u89d2\u6d32\u884c\u52a8 \u4ec5\u970017\u4e07 \u77ac\u79d2\u5218\u6d9b \u6700\u5f3a\u8170\u5c04\u7c91\u7c91\u67aa SR-3M' attempt 1: [0;31mERROR:[0m [download] Got error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')). Giving up after 10 retries
+2025-10-06 08:48:58,465 - ERROR - Download failed for '\u4e09\u89d2\u6d32\u884c\u52a8 \u4ec5\u970017\u4e07 \u77ac\u79d2\u5218\u6d9b \u6700\u5f3a\u8170\u5c04\u7c91\u7c91\u67aa SR-3M' attempt 2: [0;31mERROR:[0m [download] Got error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')). Giving up after 10 retries
+2025-10-06 08:51:29,033 - ERROR - Download failed for '\u4e09\u89d2\u6d32\u884c\u52a8 \u4ec5\u970017\u4e07 \u77ac\u79d2\u5218\u6d9b \u6700\u5f3a\u8170\u5c04\u7c91\u7c91\u67aa SR-3M' attempt 3: [0;31mERROR:[0m [download] Got error: HTTPSConnectionPool(host='upos-hz-mirrorakam.akamaized.net', port=443): Read timed out. (read timeout=20.0). Giving up after 10 retries
+2025-10-06 08:53:55,316 - ERROR - Download failed for '\u4e09\u89d2\u6d32\u884c\u52a8 \u4ec5\u970017\u4e07 \u77ac\u79d2\u5218\u6d9b \u6700\u5f3a\u8170\u5c04\u7c91\u7c91\u67aa SR-3M' attempt 4: [0;31mERROR:[0m [download] Got error: HTTPSConnectionPool(host='upos-hz-mirrorakam.akamaized.net', port=443): Read timed out. (read timeout=20.0). Giving up after 10 retries
+2025-10-06 08:55:58,414 - ERROR - Download failed for '\u4e09\u89d2\u6d32\u884c\u52a8 \u4ec5\u970017\u4e07 \u77ac\u79d2\u5218\u6d9b \u6700\u5f3a\u8170\u5c04\u7c91\u7c91\u67aa SR-3M' attempt 5: [0;31mERROR:[0m [download] Got error: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')). Giving up after 10 retries
+2025-10-06 09:14:56,220 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 09:15:17,213 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 09:20:07,873 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 09:44:18,169 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 09:46:48,210 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 09:49:14,251 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 09:51:55,857 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 09:53:44,678 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 10:04:05,256 - WARNING - q_combo does not exist when update_quality_options called
+2025-10-06 10:08:51,570 - WARNING - q_combo does not exist when update_quality_options called

@@ -17,8 +17,8 @@ import PyQt5.QtWidgets as QtWidgets
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QPushButton, QRadioButton, QComboBox,
                              QListWidget, QProgressBar, QFileDialog, QMessageBox,
-                             QScrollArea, QWidget, QGroupBox, QButtonGroup, QFrame)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+                             QScrollArea, QWidget, QGroupBox, QButtonGroup, QFrame, QDialog)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 # Converter dialogs
 from converter_tool import BasicConverterDialog, AdvancedConverterDialog
@@ -43,6 +43,79 @@ import re
 import requests
 import subprocess
 import json
+import sqlite3
+import traceback
+from history_dialog import HistoryDialog
+
+# Simple translation table for English, Arabic and Japanese
+TRANSLATIONS = {
+    'en': {
+        'file': 'File', 'edit': 'Edit', 'tools': 'Tools', 'help': 'Help',
+        'convert': 'Convert', 'basic_convert': 'Basic Convert', 'advanced_converter': 'Advanced Converter',
+        'settings': 'Settings', 'light_theme': 'Light Theme', 'dark_theme': 'Dark Theme', 'preferences': 'Preferences...',
+        'about': 'About', 'open': 'Open', 'exit': 'Exit', 'coming_soon': 'Coming soon',
+        'language': 'Language', 'english': 'English', 'arabic': 'Arabic', 'japanese': 'Japanese',
+
+        'batch_download': 'Batch Download from File',
+        'media_url': 'Media URL:',
+        'fetch_playlist': 'Fetch Playlist',
+        'type': 'Type',
+        'video': 'Video', 'audio': 'Audio', 'captions': 'Captions',
+        'convert_mkv': 'Convert MKV to MP4', 'scan_folder': 'Scan Folder\nfor mkv',
+        'formats': 'Formats', 'load_formats': 'Load Formats',
+        'choose_folder': 'Choose Folder', 'folder_label': 'Folder: {folder}',
+        'counts_label': 'Downloaded: {s}/{t} | Errors: {f}', 'start_download': 'Start Download',
+        'load_cookies': 'Load Cookies.txt (optional)',
+        'convert_selected': 'Convert Selected', 'convert_all': 'Convert All',
+        'download_history': 'Download History',
+        'ready': 'Ready', 'preferences_title': 'Preferences', 'ok': 'OK', 'cancel': 'Cancel'
+    },
+    'ar': {
+        'file': 'ملف', 'edit': 'تحرير', 'tools': 'أدوات', 'help': 'مساعدة',
+        'convert': 'تحويل', 'basic_convert': 'تحويل أساسي', 'advanced_converter': 'محول متقدم',
+        'settings': 'الإعدادات', 'light_theme': 'وضع فاتح', 'dark_theme': 'الوضع الداكن', 'preferences': 'تفضيلات...',
+        'about': 'حول', 'open': 'فتح', 'exit': 'خروج', 'coming_soon': 'قريبًا',
+        'language': 'اللغة', 'english': 'الإنجليزية', 'arabic': 'العربية', 'japanese': 'اليابانية',
+
+        'batch_download': 'تنزيل دفعي من ملف',
+        'media_url': 'رابط الوسائط:',
+        'fetch_playlist': 'جلب القائمة',
+        'type': 'النوع',
+        'video': 'فيديو', 'audio': 'صوت', 'captions': 'ترجمة',
+        'convert_mkv': 'تحويل MKV إلى MP4', 'scan_folder': 'مسح مجلد\nلـ mkv',
+        'formats': 'الأنماط', 'load_formats': 'تحميل الأنماط',
+        'choose_folder': 'اختر المجلد', 'folder_label': 'المجلد: {folder}',
+        'counts_label': 'تم التنزيل: {s}/{t} | الأخطاء: {f}', 'start_download': 'ابدأ التنزيل',
+        'load_cookies': 'تحميل cookies.txt (اختياري)',
+        'convert_selected': 'تحويل المحدد', 'convert_all': 'تحويل الكل',
+        'download_history': 'سجل التنزيلات',
+        'ready': 'جاهز', 'preferences_title': 'التفضيلات', 'ok': 'موافق', 'cancel': 'إلغاء'
+    },
+    'ja': {
+        # placeholder to keep structure; real strings are above
+    },
+    'ja': {
+        'file': 'ファイル', 'edit': '編集', 'tools': 'ツール', 'help': 'ヘルプ',
+        'convert': '変換', 'basic_convert': '基本変換', 'advanced_converter': '高度な変換',
+        'settings': '設定', 'light_theme': 'ライトテーマ', 'dark_theme': 'ダークテーマ', 'preferences': '設定...',
+        'about': 'アプリについて', 'open': '開く', 'exit': '終了', 'coming_soon': '近日公開',
+        'language': '言語', 'english': '英語', 'arabic': 'アラビア語', 'japanese': '日本語',
+
+        'batch_download': 'ファイルから一括ダウンロード',
+        'media_url': 'メディアURL:',
+        'fetch_playlist': 'プレイリスト取得',
+        'type': 'タイプ',
+        'video': 'ビデオ', 'audio': '音声', 'captions': 'キャプション',
+        'convert_mkv': 'MKVをMP4に変換', 'scan_folder': 'フォルダをスキャン\nfor mkv',
+        'formats': 'フォーマット', 'load_formats': 'フォーマットを読み込む',
+        'choose_folder': 'フォルダを選択', 'folder_label': 'フォルダ: {folder}',
+        'counts_label': 'ダウンロード済: {s}/{t} | エラー: {f}', 'start_download': 'ダウンロード開始',
+        'load_cookies': 'Cookies.txtを読み込む(オプション)',
+        'convert_selected': '選択を変換', 'convert_all': 'すべて変換',
+        'download_history': 'ダウンロード履歴',
+        'ready': '準備完了', 'preferences_title': '設定', 'ok': 'OK', 'cancel': 'キャンセル'
+    }
+}
 
 from pathlib import Path
 file_path = Path(__file__).resolve()
@@ -64,6 +137,7 @@ AUDIO_COPY_DIR = os.path.join(DOWNLOAD_DIR, "audio_only")
 LOG_FILE = check_os("youtube_downloader.log")
 ARCHIVE_FILE = os.path.join(DOWNLOAD_DIR, 'downloaded_videos.txt')
 SETTINGS_FILE = check_os('settings.json')
+HISTORY_DB = check_os('download_history.db')
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(AUDIO_COPY_DIR, exist_ok=True)
@@ -130,10 +204,71 @@ class YouTubeDownloader(QMainWindow):
                 try:
                     with YoutubeDL(ydl_opts) as ydl:
                         info = ydl.extract_info(url, download=True)
+
+                    # Best-effort file detection in DOWNLOAD_DIR using title or id
+                    title = sanitize_filename(info.get('title') or info.get('id') or 'Unknown')
+                    video_id = info.get('id') or ''
+                    file_path = ''
+                    file_size = 0
+                    try:
+                        candidates = []
+                        for root, _, files in os.walk(DOWNLOAD_DIR):
+                            for fn in files:
+                                if title.lower() in fn.lower() or (video_id and video_id in fn):
+                                    full = os.path.join(root, fn)
+                                    try:
+                                        m = os.path.getmtime(full)
+                                    except Exception:
+                                        m = 0
+                                    candidates.append((m, full))
+                        if candidates:
+                            candidates.sort(reverse=True)
+                            file_path = candidates[0][1]
+                            try:
+                                file_size = os.path.getsize(file_path)
+                            except Exception:
+                                file_size = 0
+                    except Exception:
+                        logging.exception('Error locating batch downloaded file')
+
                     ok += 1
+
+                    try:
+                        rec = {
+                            'url': url,
+                            'title': info.get('title') or '',
+                            'format': 'Video',
+                            'quality': '',
+                            'status': 'Completed',
+                            'download_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'file_size': file_size,
+                            'duration': int(info.get('duration') or 0),
+                            'platform': info.get('extractor') or 'Unknown',
+                            'file_path': file_path
+                        }
+                        self._log_download(rec)
+                    except Exception:
+                        logging.exception('Failed to log batch download')
+
                 except Exception as e:
                     fail += 1
                     logging.error(f"Batch download failed for {url}: {e}")
+                    try:
+                        rec = {
+                            'url': url,
+                            'title': '',
+                            'format': 'Video',
+                            'quality': '',
+                            'status': 'Failed',
+                            'download_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'file_size': 0,
+                            'duration': 0,
+                            'platform': 'Unknown',
+                            'file_path': ''
+                        }
+                        self._log_download(rec)
+                    except Exception:
+                        logging.exception('Failed to log batch failure')
             msg = f"Batch complete. Downloaded: {ok}, Failed: {fail}"
             if fail:
                 msg += "\nCheck log for details."
@@ -162,6 +297,17 @@ class YouTubeDownloader(QMainWindow):
         # UI/theme settings
         self.settings = {}
         self._load_settings()
+
+        # Initialize history DB and a UI heartbeat timer for safe UI updates
+        try:
+            self._init_history_db()
+        except Exception:
+            logging.exception('Failed to initialize history DB')
+
+        self._heartbeat_timer = QTimer(self)
+        self._heartbeat_timer.setInterval(1000)
+        self._heartbeat_timer.timeout.connect(self._heartbeat)
+        self._heartbeat_timer.start()
 
         # Video qualities and audio
         self.video_qualities = ['best', 'bestvideo[height<=1080]+bestaudio', 'bestvideo[height<=720]+bestaudio', 'worst']
@@ -196,6 +342,10 @@ class YouTubeDownloader(QMainWindow):
             self._apply_theme(self.settings.get('theme', 'light'))
         except Exception:
             pass
+
+    # Preferences dialog implementation has been moved to the end of the file to keep
+    # the YouTubeDownloader class definition contiguous.
+
 
     def _save_settings(self):
         """Persist settings to disk."""
@@ -238,6 +388,124 @@ class YouTubeDownloader(QMainWindow):
             except Exception:
                 pass
 
+    def _tr(self, key: str) -> str:
+        """Translate a label key according to current language setting."""
+        lang = self.settings.get('language', 'en') if isinstance(self.settings, dict) else 'en'
+        return TRANSLATIONS.get(lang, TRANSLATIONS['en']).get(key, key)
+
+    def _set_and_save_language(self, lang_code: str):
+        if lang_code not in TRANSLATIONS:
+            return
+        self.settings['language'] = lang_code
+        self._save_settings()
+        self._apply_language(lang_code)
+
+    def _apply_language(self, lang_code: str):
+        """Update visible menu labels to the selected language."""
+        # Update top-level menus and menu items that were created in setup_ui
+        try:
+            menubar = self.menuBar()
+            # Map top-level menu labels
+            for action in menubar.actions():
+                txt = action.text()
+                if txt in ('File', 'ملف', 'ファイル'):
+                    action.setText(self._tr('file'))
+                elif txt in ('Edit', 'تحرير', '編集'):
+                    action.setText(self._tr('edit'))
+                elif txt in ('Tools', 'أدوات', 'ツール'):
+                    action.setText(self._tr('tools'))
+                elif txt in ('Help', 'مساعدة', 'ヘルプ'):
+                    action.setText(self._tr('help'))
+
+            # Update Settings and Convert labels inside menus
+            for top_action in menubar.actions():
+                menu = top_action.menu()
+                if not menu:
+                    continue
+                for sub in menu.actions():
+                    st = sub.text()
+                    if st in ('Settings', 'الإعدادات', '設定'):
+                        sub.setText(self._tr('settings'))
+                    if st in ('Convert', 'تحويل', '変換'):
+                        sub.setText(self._tr('convert'))
+        except Exception:
+            pass
+
+    def _init_history_db(self):
+        """Create history database and table if missing. Use file-level sqlite (safe across threads if using separate connections)."""
+        try:
+            conn = sqlite3.connect(HISTORY_DB, timeout=5)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS downloads (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT,
+                    title TEXT,
+                    format TEXT,
+                    quality TEXT,
+                    status TEXT,
+                    download_date TEXT,
+                    file_size INTEGER,
+                    duration INTEGER,
+                    platform TEXT,
+                    file_path TEXT
+                )
+            ''')
+            conn.commit()
+            conn.close()
+        except Exception:
+            logging.exception('Could not create or access history DB')
+
+    def _log_download(self, record: dict):
+        """Insert a download record into history DB. This opens a fresh sqlite connection per-call for thread-safety."""
+        try:
+            conn = sqlite3.connect(HISTORY_DB, timeout=5)
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO downloads (url, title, format, quality, status, download_date, file_size, duration, platform, file_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                record.get('url'),
+                record.get('title'),
+                record.get('format'),
+                record.get('quality'),
+                record.get('status'),
+                record.get('download_date'),
+                record.get('file_size'),
+                record.get('duration'),
+                record.get('platform'),
+                record.get('file_path')
+            ))
+            conn.commit()
+            conn.close()
+        except Exception:
+            logging.exception('Failed to log download record: %s', traceback.format_exc())
+
+    def _open_history(self):
+        try:
+            dlg = HistoryDialog(HISTORY_DB, self)
+            dlg.exec_()
+        except Exception as e:
+            logging.exception('Failed to open history dialog: %s', e)
+            self.show_message('Error', f'Could not open history:\n{e}', QMessageBox.Critical)
+
+    def _heartbeat(self):
+        # Minimal heartbeat to keep UI responsive and allow thread cleanup
+        try:
+            # no-op currently; placeholder for periodic UI updates if needed
+            pass
+        except Exception:
+            logging.exception('Heartbeat error')
+
+        # Update language action checks
+        try:
+            lc = self.settings.get('language', 'en')
+            self.lang_en_action.setChecked(lc == 'en')
+            self.lang_ar_action.setChecked(lc == 'ar')
+            self.lang_ja_action.setChecked(lc == 'ja')
+        except Exception:
+            pass
+
     def _track_thread(self, worker):
         self.threads.add(worker)
         worker.finished_signal.connect(lambda *_: self.threads.discard(worker))
@@ -255,74 +523,91 @@ class YouTubeDownloader(QMainWindow):
         # --- Menu Bar ---
         menubar = self.menuBar()
 
-        # Generic menus that currently show a 'Coming soon' message
-        file_menu = menubar.addMenu("File")
-        edit_menu = menubar.addMenu("Edit")
-        tools_menu = menubar.addMenu("Tools")
-        help_menu = menubar.addMenu("Help")
+        # Top-level menus
+        file_menu = menubar.addMenu(self._tr('file'))
+        edit_menu = menubar.addMenu(self._tr('edit'))
+        tools_menu = menubar.addMenu(self._tr('tools'))
+        help_menu = menubar.addMenu(self._tr('help'))
 
-        # Simple actions for the generic menus
-        file_action = file_menu.addAction("Open")
-        file_action.triggered.connect(lambda: self._show_coming_soon('Open'))
-        exit_action = file_menu.addAction("Exit")
+        # File actions
+        file_action = file_menu.addAction(self._tr('open'))
+        file_action.triggered.connect(lambda: self._show_coming_soon(self._tr('open')))
+        exit_action = file_menu.addAction(self._tr('exit'))
         exit_action.triggered.connect(self.close)
 
         # Settings submenu including theme selection
-        settings_menu = edit_menu.addMenu("Settings")
+        settings_menu = edit_menu.addMenu(self._tr('settings'))
 
         # Theme actions (Light / Dark)
         theme_group = QtWidgets.QActionGroup(self)
-        self.light_theme_action = settings_menu.addAction("Light Theme")
+        self.light_theme_action = settings_menu.addAction(self._tr('light_theme'))
         self.light_theme_action.setCheckable(True)
-        self.dark_theme_action = settings_menu.addAction("Dark Theme")
+        self.dark_theme_action = settings_menu.addAction(self._tr('dark_theme'))
         self.dark_theme_action.setCheckable(True)
         theme_group.addAction(self.light_theme_action)
         theme_group.addAction(self.dark_theme_action)
-
-        # Connect theme actions
         self.light_theme_action.triggered.connect(lambda: self._set_and_save_theme('light'))
         self.dark_theme_action.triggered.connect(lambda: self._set_and_save_theme('dark'))
 
-        # A simple Preferences placeholder remains for other settings
-        pref_action = settings_menu.addAction("Preferences...")
-        pref_action.triggered.connect(lambda: self._show_coming_soon('Preferences'))
+        # Language submenu (English, Arabic, Japanese)
+        lang_menu = settings_menu.addMenu(self._tr('language'))
+        lang_group = QtWidgets.QActionGroup(self)
+        self.lang_en_action = lang_menu.addAction(self._tr('english'))
+        self.lang_en_action.setCheckable(True)
+        self.lang_ar_action = lang_menu.addAction(self._tr('arabic'))
+        self.lang_ar_action.setCheckable(True)
+        self.lang_ja_action = lang_menu.addAction(self._tr('japanese'))
+        self.lang_ja_action.setCheckable(True)
+        lang_group.addAction(self.lang_en_action)
+        lang_group.addAction(self.lang_ar_action)
+        lang_group.addAction(self.lang_ja_action)
+        self.lang_en_action.triggered.connect(lambda: self._set_and_save_language('en'))
+        self.lang_ar_action.triggered.connect(lambda: self._set_and_save_language('ar'))
+        self.lang_ja_action.triggered.connect(lambda: self._set_and_save_language('ja'))
 
-        tools_action = tools_menu.addAction("Tools")
-        tools_action.triggered.connect(lambda: self._show_coming_soon('Tools'))
+    # (Preferences moved to Tools menu; Settings keeps theme & language only)
 
-        help_action = help_menu.addAction("About")
-        help_action.triggered.connect(lambda: self._show_coming_soon('About'))
-
-        # Convert menu with two real submenus that open converter dialogs
-        convert_menu = menubar.addMenu("Convert")
-        basic_convert_action = convert_menu.addAction("Basic Convert")
+    # Tools menu: Convert (submenu), Download History, Preferences
+        convert_menu = tools_menu.addMenu(self._tr('convert'))
+        basic_convert_action = convert_menu.addAction(self._tr('basic_convert'))
         basic_convert_action.triggered.connect(self._open_basic_converter)
-        advanced_convert_action = convert_menu.addAction("Advanced Converter")
+        advanced_convert_action = convert_menu.addAction(self._tr('advanced_converter'))
         advanced_convert_action.triggered.connect(self._open_advanced_converter)
 
+        history_action = tools_menu.addAction(self._tr('download_history'))
+        history_action.triggered.connect(self._open_history)
+
+        pref_action = tools_menu.addAction(self._tr('preferences'))
+        pref_action.triggered.connect(self._open_preferences)
+
+        # Help
+        help_action = help_menu.addAction(self._tr('about'))
+        help_action.triggered.connect(lambda: self._show_coming_soon(self._tr('about')))
+
         # Batch download button
-        batch_btn = QPushButton("Batch Download from File")
-        batch_btn.clicked.connect(self.batch_download_from_file)
-        self.content_layout.addWidget(batch_btn)
+        self.batch_btn = QPushButton(self._tr('batch_download'))
+        self.batch_btn.clicked.connect(self.batch_download_from_file)
+        self.content_layout.addWidget(self.batch_btn)
+
         # URL Entry
         url_layout = QHBoxLayout()
-        url_label = QLabel("Media URL:")
+        self.url_label = QLabel(self._tr('media_url'))
         self.url_entry = QLineEdit()
         self.url_entry.setMinimumWidth(500)
-        fetch_btn = QPushButton("Fetch Playlist")
-        fetch_btn.clicked.connect(self.fetch_videos)
-        url_layout.addWidget(url_label)
+        self.fetch_btn = QPushButton(self._tr('fetch_playlist'))
+        self.fetch_btn.clicked.connect(self.fetch_videos)
+        url_layout.addWidget(self.url_label)
         url_layout.addWidget(self.url_entry)
-        url_layout.addWidget(fetch_btn)
+        url_layout.addWidget(self.fetch_btn)
         self.content_layout.addLayout(url_layout)
 
         # Type selection
-        type_group = QGroupBox("Type")
+        type_group = QGroupBox(self._tr('type'))
         type_layout = QHBoxLayout(type_group)
         self.radio_group = QButtonGroup()
-        self.radio_video = QRadioButton("Video")
-        self.radio_audio = QRadioButton("Audio")
-        self.radio_captions = QRadioButton("Captions")
+        self.radio_video = QRadioButton(self._tr('video'))
+        self.radio_audio = QRadioButton(self._tr('audio'))
+        self.radio_captions = QRadioButton(self._tr('captions'))
         self.radio_video.toggled.connect(self.update_quality_options)
         self.radio_audio.toggled.connect(self.update_quality_options)
         self.radio_captions.toggled.connect(self.update_quality_options)
@@ -342,12 +627,12 @@ class YouTubeDownloader(QMainWindow):
         type_layout.addWidget(self.captions_lang_combo)
 
         # Convert and Scan buttons
-        convert_btn = QPushButton("Convert MKV to MP4")
-        convert_btn.clicked.connect(self.convert_mkv_button)
-        scan_btn = QPushButton("Scan Folder\nfor mkv")
-        scan_btn.clicked.connect(self.scan_folder_button)
-        type_layout.addWidget(convert_btn)
-        type_layout.addWidget(scan_btn)
+        self.convert_btn_mkv = QPushButton(self._tr('convert_mkv'))
+        self.convert_btn_mkv.clicked.connect(self.convert_mkv_button)
+        self.scan_btn = QPushButton(self._tr('scan_folder'))
+        self.scan_btn.clicked.connect(self.scan_folder_button)
+        type_layout.addWidget(self.convert_btn_mkv)
+        type_layout.addWidget(self.scan_btn)
 
         self.content_layout.addWidget(type_group)
 
@@ -356,10 +641,10 @@ class YouTubeDownloader(QMainWindow):
         self.q_combo = QComboBox()
         self.q_combo.addItems(self.video_qualities)
         self.q_combo.setEditable(False)
-        load_formats_btn = QPushButton("Load Formats")
-        load_formats_btn.clicked.connect(self.load_formats_for_selection)
+        self.load_formats_btn = QPushButton(self._tr('load_formats'))
+        self.load_formats_btn.clicked.connect(self.load_formats_for_selection)
         formats_layout.addWidget(self.q_combo)
-        formats_layout.addWidget(load_formats_btn)
+        formats_layout.addWidget(self.load_formats_btn)
         self.formats_widget = QWidget()
         self.formats_widget.setLayout(formats_layout)
         self.content_layout.addWidget(self.formats_widget)
@@ -372,7 +657,7 @@ class YouTubeDownloader(QMainWindow):
         self.content_layout.addLayout(list_layout)
 
         # Progress
-        self.progress_label = QLabel("")
+        self.progress_label = QLabel(self._tr('ready'))
         self.content_layout.addWidget(self.progress_label)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -381,36 +666,43 @@ class YouTubeDownloader(QMainWindow):
 
         # Folder chooser
         folder_layout = QHBoxLayout()
-        folder_btn = QPushButton("Choose Folder")
-        folder_btn.clicked.connect(self.choose_folder)
-        self.folder_label = QLabel(f"Folder: {DOWNLOAD_DIR}")
-        folder_layout.addWidget(folder_btn)
+        self.folder_btn = QPushButton(self._tr('choose_folder'))
+        self.folder_btn.clicked.connect(self.choose_folder)
+        self.folder_label = QLabel(self._tr('folder_label').format(folder=DOWNLOAD_DIR))
+        folder_layout.addWidget(self.folder_btn)
         folder_layout.addWidget(self.folder_label)
         self.content_layout.addLayout(folder_layout)
 
-        self.counts_label = QLabel("Downloaded: 0/0 | Errors: 0")
+        # Counts label
+        self.counts_label = QLabel(self._tr('counts_label').format(s=0, t=0, f=0))
         self.content_layout.addWidget(self.counts_label)
 
         # Start button
-        self.start_btn = QPushButton("Start Download")
+        self.start_btn = QPushButton(self._tr('start_download'))
         self.start_btn.setStyleSheet("background-color: green; color: white;")
         self.start_btn.clicked.connect(self.download_selected)
         self.content_layout.addWidget(self.start_btn)
 
         # Cookies button
-        cookies_btn = QPushButton("Load Cookies.txt (optional)")
-        cookies_btn.clicked.connect(self.load_cookies)
-        self.content_layout.addWidget(cookies_btn)
+        self.cookies_btn = QPushButton(self._tr('load_cookies'))
+        self.cookies_btn.clicked.connect(self.load_cookies)
+        self.content_layout.addWidget(self.cookies_btn)
 
         # Convert buttons (hidden initially)
-        self.convert_selected_btn = QPushButton("Convert Selected")
+        self.convert_selected_btn = QPushButton(self._tr('convert_selected'))
         self.convert_selected_btn.clicked.connect(self.convert_selected_action_inline)
-        self.convert_all_btn = QPushButton("Convert All")
+        self.convert_all_btn = QPushButton(self._tr('convert_all'))
         self.convert_all_btn.clicked.connect(self.convert_all_action_inline)
         self.convert_selected_btn.hide()
         self.convert_all_btn.hide()
         self.content_layout.addWidget(self.convert_selected_btn)
         self.content_layout.addWidget(self.convert_all_btn)
+
+        # Refresh text to ensure translations are applied
+        try:
+            self._refresh_ui_texts()
+        except Exception:
+            pass
 
     def _show_coming_soon(self, name: str):
         """Show a standardized 'Coming soon' message for placeholder menu items."""
@@ -433,6 +725,49 @@ class YouTubeDownloader(QMainWindow):
         except Exception as e:
             logging.exception('Failed to open AdvancedConverterDialog: %s', e)
             self.show_message('Error', f'Could not open Advanced Converter:\n{e}', QMessageBox.Critical)
+
+    def _refresh_ui_texts(self):
+        """Update UI strings to current language (best-effort)."""
+        try:
+            # Menus are updated by _apply_language, but update buttons/labels here
+            self.batch_btn.setText(self._tr('batch_download'))
+            self.url_label.setText(self._tr('media_url'))
+            self.fetch_btn.setText(self._tr('fetch_playlist'))
+            self.radio_video.setText(self._tr('video'))
+            self.radio_audio.setText(self._tr('audio'))
+            self.radio_captions.setText(self._tr('captions'))
+            self.convert_btn_mkv.setText(self._tr('convert_mkv'))
+            self.scan_btn.setText(self._tr('scan_folder'))
+            self.load_formats_btn.setText(self._tr('load_formats'))
+            self.folder_btn.setText(self._tr('choose_folder'))
+            self.folder_label.setText(self._tr('folder_label').format(folder=DOWNLOAD_DIR))
+            self.counts_label.setText(self._tr('counts_label').format(s=0, t=0, f=0))
+            self.start_btn.setText(self._tr('start_download'))
+            self.cookies_btn.setText(self._tr('load_cookies'))
+            self.convert_selected_btn.setText(self._tr('convert_selected'))
+            self.convert_all_btn.setText(self._tr('convert_all'))
+        except Exception:
+            pass
+
+    def _open_preferences(self):
+        """Open Preferences dialog (created at runtime so class definition order doesn't matter)."""
+        try:
+            dlg = PreferencesDialog(self)
+            dlg.exec_()
+        except NameError:
+            # PreferencesDialog may be defined later in the file; import it dynamically
+            try:
+                # reload module to ensure class is available
+                import importlib
+                importlib.reload(sys.modules[__name__])
+                dlg = PreferencesDialog(self)
+                dlg.exec_()
+            except Exception as e:
+                logging.exception('Failed to open Preferences dialog: %s', e)
+                self.show_message('Error', f'Could not open Preferences:\n{e}', QMessageBox.Critical)
+        except Exception as e:
+            logging.exception('Failed to open Preferences dialog: %s', e)
+            self.show_message('Error', f'Could not open Preferences:\n{e}', QMessageBox.Critical)
 
     def _populate_videos(self, data):
         titles, entries = data
@@ -810,6 +1145,46 @@ class YouTubeDownloader(QMainWindow):
                             ydl.download([url])
                         self.success_count += 1
                         worker.count_update.emit(self.success_count, self.failure_count)
+                        # Attempt to find the downloaded file in target_dir (best-effort)
+                        try:
+                            file_path = ''
+                            file_size = 0
+                            candidates = []
+                            for root, _, files in os.walk(target_dir):
+                                for fn in files:
+                                    # match by title or video id if present
+                                    if title.lower() in fn.lower() or (video_id and video_id in fn):
+                                        full = os.path.join(root, fn)
+                                        candidates.append((os.path.getmtime(full), full))
+                            if candidates:
+                                # choose most recently modified match
+                                candidates.sort(reverse=True)
+                                file_path = candidates[0][1]
+                                try:
+                                    file_size = os.path.getsize(file_path)
+                                except Exception:
+                                    file_size = 0
+                        except Exception:
+                            logging.exception('Failed to locate downloaded file')
+
+                        # Log successful download (non-blocking safe sqlite write)
+                        try:
+                            rec = {
+                                'url': url,
+                                'title': title,
+                                'format': 'Audio' if mode == 'Audio' else 'Video' if mode == 'Video' else 'Captions',
+                                'quality': quality or '',
+                                'status': 'Completed',
+                                'download_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                'file_size': file_size,
+                                'duration': 0,
+                                'platform': entry.get('extractor') or entry.get('webpage_url') or 'Unknown',
+                                'file_path': file_path
+                            }
+                            self._log_download(rec)
+                        except Exception:
+                            logging.exception('Failed to log success record')
+
                         break
                     except Exception as e:
                         attempts += 1
@@ -818,6 +1193,23 @@ class YouTubeDownloader(QMainWindow):
                         if attempts >= local_max:
                             self.failure_count += 1
                             worker.count_update.emit(self.success_count, self.failure_count)
+                            # Log failed record
+                            try:
+                                rec = {
+                                    'url': url,
+                                    'title': title,
+                                    'format': 'Audio' if mode == 'Audio' else 'Video' if mode == 'Video' else 'Captions',
+                                    'quality': quality or '',
+                                    'status': 'Failed',
+                                    'download_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    'file_size': 0,
+                                    'duration': 0,
+                                    'platform': entry.get('extractor') or entry.get('webpage_url') or 'Unknown',
+                                    'file_path': ''
+                                }
+                                self._log_download(rec)
+                            except Exception:
+                                logging.exception('Failed to log failure record')
                             break
 
             if self.failure_count == 0:
@@ -953,6 +1345,77 @@ class YouTubeDownloader(QMainWindow):
         worker.finished_signal.connect(lambda msg: self.show_message("Convert All", msg))
         self._track_thread(worker)
         worker.start()
+        worker = WorkerThread(_run)
+        worker.finished_signal.connect(lambda msg: self.show_message("Convert All", msg))
+        self._track_thread(worker)
+        worker.start()
+
+
+class PreferencesDialog(QDialog):
+    def __init__(self, parent: YouTubeDownloader):
+        super().__init__(parent)
+        self.parent = parent
+        self.setWindowTitle(parent._tr('preferences_title'))
+        self.setMinimumSize(400, 300)
+
+        layout = QVBoxLayout(self)
+
+        # Theme section
+        theme_group = QGroupBox(parent._tr('settings'))
+        t_layout = QVBoxLayout(theme_group)
+        self.light_rb = QtWidgets.QRadioButton(parent._tr('light_theme'))
+        self.dark_rb = QtWidgets.QRadioButton(parent._tr('dark_theme'))
+        t_layout.addWidget(self.light_rb)
+        t_layout.addWidget(self.dark_rb)
+        layout.addWidget(theme_group)
+
+        # Language section
+        lang_group = QGroupBox(parent._tr('language'))
+        l_layout = QVBoxLayout(lang_group)
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems([parent._tr('english'), parent._tr('arabic'), parent._tr('japanese')])
+        l_layout.addWidget(self.lang_combo)
+        layout.addWidget(lang_group)
+
+        # Quick access info
+        quick = QLabel("Quick access: Theme and Language settings are available from Edit -> Settings")
+        quick.setWordWrap(True)
+        layout.addWidget(quick)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton(parent._tr('ok'))
+        ok_btn.clicked.connect(self._on_ok)
+        cancel_btn = QPushButton(parent._tr('cancel'))
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        # Set current values
+        cur_lang = parent.settings.get('language', 'en')
+        idx = 0 if cur_lang == 'en' else (1 if cur_lang == 'ar' else 2)
+        self.lang_combo.setCurrentIndex(idx)
+        if parent.settings.get('theme', 'light') == 'dark':
+            self.dark_rb.setChecked(True)
+        else:
+            self.light_rb.setChecked(True)
+
+    def _on_ok(self):
+        # Apply theme
+        theme = 'dark' if self.dark_rb.isChecked() else 'light'
+        self.parent._set_and_save_theme(theme)
+        # Apply language
+        idx = self.lang_combo.currentIndex()
+        lang = 'en' if idx == 0 else ('ar' if idx == 1 else 'ja')
+        self.parent._set_and_save_language(lang)
+        # Refresh main UI texts
+        try:
+            self.parent._refresh_ui_texts()
+        except Exception:
+            pass
+        self.accept()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

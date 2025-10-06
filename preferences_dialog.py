@@ -1,6 +1,7 @@
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QGroupBox, QHBoxLayout,
-                             QLabel, QPushButton, QComboBox, QRadioButton)
+                             QLabel, QPushButton, QComboBox, QRadioButton,
+                             QFileDialog, QLineEdit)
 
 class PreferencesDialog(QDialog):
     """Preferences dialog moved out of main file. Expects a parent with methods:
@@ -40,6 +41,35 @@ class PreferencesDialog(QDialog):
         quick.setWordWrap(True)
         layout.addWidget(quick)
 
+        # History DB path selector
+        db_group = QGroupBox(parent._tr('download_history') if hasattr(parent, '_tr') else 'History DB')
+        db_layout = QHBoxLayout(db_group)
+        self.db_path_edit = QLineEdit()
+        # Show current configured DB path if available
+        cur_db = None
+        try:
+            cur_db = parent.settings.get('history_db') if getattr(parent, 'settings', None) else None
+        except Exception:
+            cur_db = None
+        if not cur_db:
+            try:
+                cur_db = getattr(parent, 'history_db_path')
+            except Exception:
+                cur_db = None
+        if cur_db:
+            self.db_path_edit.setText(cur_db)
+        browse_btn = QPushButton(parent._tr('choose_folder') if hasattr(parent, '_tr') else 'Browse...')
+
+        def _browse():
+            path, _ = QFileDialog.getSaveFileName(self, parent._tr('download_history') if hasattr(parent, '_tr') else 'History DB', cur_db or '', "SQLite DB (*.db *.sqlite);;All Files (*)")
+            if path:
+                self.db_path_edit.setText(path)
+
+        browse_btn.clicked.connect(_browse)
+        db_layout.addWidget(self.db_path_edit)
+        db_layout.addWidget(browse_btn)
+        layout.addWidget(db_group)
+
         # Buttons
         btn_layout = QHBoxLayout()
         ok_btn = QPushButton(parent._tr('ok'))
@@ -66,7 +96,30 @@ class PreferencesDialog(QDialog):
             self.parent._set_and_save_theme(theme)
             idx = self.lang_combo.currentIndex()
             lang = 'en' if idx == 0 else ('ar' if idx == 1 else 'ja')
-            self.parent._set_and_save_language(lang)
+            # Save language first
+            try:
+                self.parent._set_and_save_language(lang)
+            except Exception:
+                pass
+
+            # Save history DB path if provided
+            try:
+                new_db = self.db_path_edit.text().strip()
+                if new_db:
+                    # Preferred: call parent's setter if exists
+                    if hasattr(self.parent, '_set_and_save_history_db'):
+                        try:
+                            self.parent._set_and_save_history_db(new_db)
+                        except Exception:
+                            # fallback to storing in settings
+                            self.parent.settings['history_db'] = new_db
+                            self.parent._save_settings()
+                    else:
+                        self.parent.settings['history_db'] = new_db
+                        self.parent._save_settings()
+            except Exception:
+                pass
+
             try:
                 self.parent._refresh_ui_texts()
             except Exception:

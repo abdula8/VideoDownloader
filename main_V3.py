@@ -138,7 +138,23 @@ AUDIO_COPY_DIR = os.path.join(DOWNLOAD_DIR, "audio_only")
 LOG_FILE = check_os("youtube_downloader.log")
 ARCHIVE_FILE = os.path.join(DOWNLOAD_DIR, 'downloaded_videos.txt')
 SETTINGS_FILE = check_os('settings.json')
-HISTORY_DB = check_os('download_history.db')
+# Default history DB: put under a per-user persistent location (AppData on Windows, ~/.local/share on Linux)
+from pathlib import Path as _Path
+def _default_history_db_path():
+    try:
+        if sys.platform == 'win32':
+            appdata = os.environ.get('APPDATA') or str(_Path.home())
+            base = os.path.join(appdata, 'YouTubeDownloader')
+        elif sys.platform == 'linux':
+            base = os.path.join(str(_Path.home()), '.local', 'share', 'youtubedownloader')
+        else:
+            base = os.path.join(str(_Path.home()), '.youtubedownloader')
+        os.makedirs(base, exist_ok=True)
+        return os.path.join(base, 'download_history.db')
+    except Exception:
+        return check_os('download_history.db')
+
+HISTORY_DB = _default_history_db_path()
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(AUDIO_COPY_DIR, exist_ok=True)
@@ -299,6 +315,13 @@ class YouTubeDownloader(QMainWindow):
         self.settings = {}
         self._load_settings()
 
+        # history DB path used by this instance (can be overridden in settings)
+        # default to module-level HISTORY_DB (may be monkeypatched in tests)
+        try:
+            self.history_db_path = self.settings.get('history_db', HISTORY_DB)
+        except Exception:
+            self.history_db_path = HISTORY_DB
+
         # Initialize history DB and a UI heartbeat timer for safe UI updates
         try:
             self._init_history_db()
@@ -343,6 +366,17 @@ class YouTubeDownloader(QMainWindow):
             self._apply_theme(self.settings.get('theme', 'light'))
         except Exception:
             pass
+
+        # If settings specify a custom history DB path, use it for this session
+        try:
+            if isinstance(self.settings, dict) and self.settings.get('history_db'):
+                self.history_db_path = self.settings.get('history_db')
+            else:
+                # ensure attribute exists
+                if not hasattr(self, 'history_db_path'):
+                    self.history_db_path = HISTORY_DB
+        except Exception:
+            self.history_db_path = HISTORY_DB
 
     # Preferences dialog implementation has been moved to the end of the file to keep
     # the YouTubeDownloader class definition contiguous.
@@ -435,7 +469,7 @@ class YouTubeDownloader(QMainWindow):
     def _init_history_db(self):
         """Create history database and table if missing. Use file-level sqlite (safe across threads if using separate connections)."""
         try:
-            conn = sqlite3.connect(HISTORY_DB, timeout=5)
+            conn = sqlite3.connect(self.history_db_path, timeout=5)
             cur = conn.cursor()
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS downloads (
@@ -460,7 +494,7 @@ class YouTubeDownloader(QMainWindow):
     def _log_download(self, record: dict):
         """Insert a download record into history DB. This opens a fresh sqlite connection per-call for thread-safety."""
         try:
-            conn = sqlite3.connect(HISTORY_DB, timeout=5)
+            conn = sqlite3.connect(self.history_db_path, timeout=5)
             cur = conn.cursor()
             cur.execute('''
                 INSERT INTO downloads (url, title, format, quality, status, download_date, file_size, duration, platform, file_path)
@@ -484,11 +518,52 @@ class YouTubeDownloader(QMainWindow):
 
     def _open_history(self):
         try:
-            dlg = HistoryDialog(HISTORY_DB, self)
+            dlg = HistoryDialog(self.history_db_path, self)
             dlg.exec_()
         except Exception as e:
             logging.exception('Failed to open history dialog: %s', e)
             self.show_message('Error', f'Could not open history:\n{e}', QMessageBox.Critical)
+
+    def _set_and_save_history_db(self, path: str):
+        """Set a new history DB path, persist it to settings, and initialize the DB file."""
+        try:
+            path = os.path.expanduser(path)
+            # ensure directory exists
+            d = os.path.dirname(path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            self.history_db_path = path
+            # persist
+            try:
+                self.settings['history_db'] = path
+                self._save_settings()
+            except Exception:
+                logging.exception('Failed to persist history_db to settings')
+            # initialize DB file and tables
+            try:
+                conn = sqlite3.connect(self.history_db_path, timeout=5)
+                cur = conn.cursor()
+                cur.execute('''
+                    CREATE TABLE IF NOT EXISTS downloads (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        url TEXT,
+                        title TEXT,
+                        format TEXT,
+                        quality TEXT,
+                        status TEXT,
+                        download_date TEXT,
+                        file_size INTEGER,
+                        duration INTEGER,
+                        platform TEXT,
+                        file_path TEXT
+                    )
+                ''')
+                conn.commit()
+                conn.close()
+            except Exception:
+                logging.exception('Failed to initialize new history DB at %s', self.history_db_path)
+        except Exception:
+            logging.exception('Invalid path provided for history DB: %s', path)
 
     def _heartbeat(self):
         # Minimal heartbeat to keep UI responsive and allow thread cleanup
@@ -1096,7 +1171,8 @@ class YouTubeDownloader(QMainWindow):
                 # Use sanitized title in outtmpl
                 ydl_opts_item = {
                     'format': quality,
-                    'outtmpl': f'%(playlist_index|NA)s - {title}.%(ext)s',
+                    # Use sanitized title only (avoid 'NA - ' prefix when playlist_index is missing)
+                    'outtmpl': f'{title}.%(ext)s',
                     'paths': {
                         'home': target_dir,
                         'temp': target_dir,

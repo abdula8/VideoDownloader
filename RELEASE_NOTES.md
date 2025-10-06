@@ -220,3 +220,28 @@ For the latest updates, news, and community discussions, visit our website at ht
 **Version 1.0.0**  
 **Release Date: December 2024**  
 **Build: Professional Edition**
+
+## Version 1.1.0 - October 2025
+
+### Summary
+This maintenance release focuses on user experience improvements, a new persistent download history, multi-language UI support, and robustness fixes.
+
+### Highlights
+- Tools menu reorganization: Tools now contains Convert, Download History, and Preferences. Preferences moved from Edit -> Settings to Tools.
+- Download History: persistent local history stored in `download_history.db` with a dedicated dialog (filtering, export, and basic actions).
+- Automatic logging: batch and individual downloads are logged (success/failure) to history.
+- Themes & Languages: Added Dark/Light themes and English/Arabic/Japanese translations with runtime switching and persistence.
+- Converter integration: Convert menu launches Basic/Advanced converter dialogs from `converter_tool.py`.
+- Stability: Improved error handling, thread-safe DB writes, and UI heartbeat to avoid freezes.
+
+### Fixes & Improvements
+- Fixed missing preferences access and consolidated settings UX.
+- Improved resilience to filesystem and database errors; added comprehensive try/except logging.
+- Reduced accidental GUI popups by simplifying the Tools menu to essential actions.
+
+### Notes
+- Arabic translation is included; RTL layout may need manual adjustments depending on system locale and fonts.
+- History DB schema is intentionally simple and safe; if you need migration or export tools, contact support.
+
+**Version 1.1.0**  
+**Release Date: October 2025**

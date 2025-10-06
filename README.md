@@ -1,74 +1,76 @@
 # Video Downloader Professional - User Manual
 
-## Quick Start Guide
+Last updated: October 2025
 
-### Installation
-1. Run the installer as Administrator
-2. Follow the installation wizard
-3. Accept the license agreement
-4. Choose your preferred options
-5. Complete the installation
+This README documents the features, recent updates and user-facing behavior of Video Downloader Professional. It is meant for end users and system administrators.
 
-### First Use
-1. Launch Video Downloader Professional from the Start Menu or Desktop
-2. The application will automatically collect cookies from your browsers
-3. Paste a video URL or enable automatic URL detection
-4. Select your preferred download options
-5. Click "Start Download"
+## Quick Start
 
-### Features Overview
+1. Install the application using the provided installer (run as Administrator on Windows).
+2. Launch the program from the Start Menu or Desktop.
+3. Paste a video/playlist URL into the URL box or use the automatic clipboard URL detection.
+4. Choose the download type (Video / Audio / Captions), quality and folder.
+5. Click Start Download or use Batch Download to process a list.
 
-#### Multi-Platform Support
-- Video (public and private videos (Using cookies file manually))
-- Facebook (videos and posts)
-- Twitter/X (tweets and threads)
-- Instagram (posts and stories)
-- TikTok (videos and content)
-- LinkedIn (professional content)
+## New and Notable Features (since last release)
 
-#### Authentication Methods (Future)
-- **Smart Cookie Collection**: Automatically gathers cookies from all browsers (Future)
-- **OAuth Integration**: Secure login through Google/Microsoft accounts (Future)
-- **Manual Authentication**: Username/password login support (Future)
-- **Selenium Automation**: Automated browser-based authentication (Future)
+- Tools menu reorganized: Tools now contains exactly three items — Convert, Download History, and Preferences. Preferences was moved from Edit->Settings to Tools.
+- Preferences dialog: unified dialog exposing Theme (Light/Dark) and Language selection (English / Arabic / Japanese), and quick access hints. Settings persist to `settings.json`.
+- Dark / Light theme support: toggle in Preferences or Edit -> Settings (theme saved across sessions).
+- Multi-language UI: English, Arabic and Japanese translations for main UI strings; language choice is persisted and applied at runtime.
+- Download History: full local history stored in `download_history.db` (SQLite). The Tools -> Download History dialog shows detailed records, search/filter, export, and basic actions (re-download, open file location, delete).
+- Automatic logging: downloads (including batch downloads) are automatically logged to the history DB with best-effort file detection. Failures are also recorded.
+- Convert dialogs integration: Convert (Tools) opens Basic / Advanced converter dialogs (see `converter_tool.py`) for remuxing and encoding tasks.
+- Robustness improvements: additional error handling, thread-safe DB writes (per-call SQLite connections), and background heartbeat timer to maintain UI responsiveness.
 
-#### Download Options
-- **Video Downloads**: High-quality video downloads up to 4K
-- **Audio Extraction**: Convert videos to MP3 audio files
-- **Caption Downloads**: Download subtitles in multiple languages
-- **Playlist Support**: Download entire playlists with one click
-- **Batch Processing**: Download multiple videos simultaneously
+## Features Overview
 
-### Keyboard Shortcuts
-- **Ctrl+V**: Paste URL from clipboard
-- **Ctrl+F**: Fetch video information
-- **Ctrl+D**: Start download
-- **Ctrl+E**: Toggle URL detection
+### Supported Platforms & Media
+- YouTube (public and private with cookies)
+- Facebook, Twitter/X, Instagram, TikTok, LinkedIn and other sites supported via yt-dlp extractor list
 
-### Troubleshooting
+### Download Types
+- Video downloads (multiple qualities) — can select formats discovered via the Load Formats button
+- Audio extraction (MP3 and other audio codecs via FFmpeg)
+- Captions download (VTT/SRT)
+- Batch downloads (load a text file with URLs)
 
-#### Common Issues
-1. **Authentication Errors**: Try clearing cookies and re-authenticating
-2. **Download Failures**: Check internet connection and URL validity
-3. **Format Issues**: Ensure FFmpeg is properly installed
-4. **Performance Issues**: Close other applications to free up resources
+### Tools
+- Convert (Tools -> Convert): Basic and Advanced converter dialogs powered by `converter_tool.py` (FFmpeg-backed).
+- Download History: detailed history with filters, CSV export and actions.
+- Preferences: theme, language, and quick access information.
 
-#### Getting Help
-- Check the Release Notes for latest information
-- Visit our support website: https://www.vtools.com/support
-- Contact support: support@vtools.com
+### User Interface & UX
+- Dark/Light themes with persistent preference.
+- Multi-language UI (English / Arabic / Japanese). Arabic strings are provided; RTL layout may require additional tuning.
+- Menu-driven layout: File, Edit (theme & language), Tools (Convert / Download History / Preferences), Help.
 
-### System Requirements
+### Settings & Persistence
+- Settings are stored in `settings.json` beside the application script.
+- Download history is stored in `download_history.db` (SQLite).
+
+## Troubleshooting
+
+- If downloads fail, check the application log `youtube_downloader.log` in the application folder.
+- Ensure FFmpeg is installed and on PATH for conversions and format remuxing.
+- If a download does not appear in history immediately, wait until the download/worker finishes — history entries are created on completion (or marked failed on repeated errors).
+
+## Keyboard Shortcuts
+- Ctrl+V: Paste URL from clipboard
+- Ctrl+F: Fetch video information
+- Ctrl+D: Start download
+- Ctrl+E: Toggle URL detection
+
+## System Requirements
+
 - Windows 10/11 (64-bit)
 - 4GB RAM minimum, 8GB recommended
-- 500MB free disk space
-- Broadband internet connection
+- 500MB free disk space (more for temporary downloads)
 
-### Privacy and Security
-- All data is processed locally on your device
-- No personal data is sent to external servers
-- Cookies are encrypted and auto-expire after 1 hour (Future)
-- Full user control over data storage and processing
+## Privacy & Security
+
+- All processing occurs locally; cookies and credentials are stored locally according to user preferences.
+- The app does not transmit personal data to remote servers by default.
 
 ---
-© 2024 VTools. All rights reserved.
+© 2024-2025 VTools. All rights reserved.

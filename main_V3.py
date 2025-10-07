@@ -199,13 +199,14 @@ class YouTubeDownloader(QMainWindow):
         if not urls:
             self.show_message("Batch Download", "No valid URLs found in the file.")
             return
-
         def _run(worker):
             total = len(urls)
             ok, fail = 0, 0
             # Ensure download directory exists
             os.makedirs(DOWNLOAD_DIR, exist_ok=True)
             for idx, url in enumerate(urls, 1):
+                # Resolve possible share/redirect URLs (Facebook share links etc.)
+                url = self.resolve_final_url(url)
                 self.progress_label.setText(f"Batch: {idx}/{total} - {url[:60]}")
                 ydl_opts = {
                     'quiet': True,
@@ -1089,6 +1090,8 @@ class YouTubeDownloader(QMainWindow):
             return
 
         url = self.url_entry.text().strip()
+        # follow share/redirect links to the real target so yt_dlp receives a usable URL
+        url = self.resolve_final_url(url)
         mode = self.radio_group.checkedButton().text()
         # Resolve selected quality when in Video/Audio mode
         selected_label = self.q_combo.currentText()
@@ -1154,7 +1157,6 @@ class YouTubeDownloader(QMainWindow):
                     self.failure_count += 1
                     worker.count_update.emit(self.success_count, self.failure_count)
                     continue
-
 
                 # Sanitize title and subdir for safe Windows paths
                 title = sanitize_filename(entry.get('title', 'Unknown Title'))

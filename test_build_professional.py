@@ -63,7 +63,8 @@ def test_build_files():
     print("\nTesting build files...")
     
     required_files = [
-        ("main_V3.py", "Main application file"),
+        ("main_app.py", "Main application file"),
+        # ("main_V3.py", "Main application file"),
         ("VideoDownloader.spec", "PyInstaller spec file"),
         ("installer.nsi", "NSIS installer script"),
         ("build_installer_professional.py", "Build script"),

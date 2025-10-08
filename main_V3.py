@@ -9,6 +9,12 @@ def sanitize_filename(name, max_length=60):
     if len(name) > max_length:
         name = name[:max_length]
     return name
+
+GITHUB_REPO = "https://github.com/abdula8/VideoDownloader"
+UPDATE_URL = f"{GITHUB_REPO}/blob/main/update"
+APP_NAME = "Video Downloader"
+APP_VERSION = "2.0.0"
+
 # main.py
 import os
 import sys
@@ -17,11 +23,15 @@ import PyQt5.QtWidgets as QtWidgets
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QPushButton, QRadioButton, QComboBox,
                              QListWidget, QProgressBar, QFileDialog, QMessageBox,
-                             QScrollArea, QWidget, QGroupBox, QButtonGroup, QFrame, QDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+                             QScrollArea, QWidget, QGroupBox, QButtonGroup, QFrame, QDialog, QAction)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QMetaObject, Q_ARG
 from PyQt5.QtGui import QFont
 # Converter dialogs
 from converter_tool import BasicConverterDialog, AdvancedConverterDialog
+import tempfile
+
+COOKIES_TEMP_DIR = os.path.join(tempfile.gettempdir(), 'YouTubeDownloader_Cookies')
+os.makedirs(COOKIES_TEMP_DIR, exist_ok=True)
 
 # from setup_helper import full_setup
 # # import cc_download.main as cc
@@ -516,6 +526,103 @@ class YouTubeDownloader(QMainWindow):
             conn.close()
         except Exception:
             logging.exception('Failed to log download record: %s', traceback.format_exc())
+    def _show_about(self):
+        """Show about dialog"""
+        about_text = f"""
+        <h2>{APP_NAME}</h2>
+        <p>Version: {APP_VERSION}</p>
+        <p>A comprehensive video downloader with advanced features including:</p>
+        <ul>
+        <li>Multi-platform support (YouTube, Facebook, Twitter, Linkedin,  etc.)</li>
+        <li>Batch downloading</li>
+        <li>Format conversion</li>
+        <li>Download history</li>
+        </ul>
+        <p>© 2025 Abdullah Atef</p>
+        <p><a href="{GITHUB_REPO}">GitHub Repository</a></p>
+        """
+        QtWidgets.QMessageBox.about(self, 'About', about_text)
+
+    def _show_documentation(self):
+        """Show documentation"""
+        import webbrowser
+        webbrowser.open(f"{GITHUB_REPO}/blob/main/README.md")
+
+    def _check_for_updates(self):
+        """Check for updates"""
+        try:
+            import requests
+            self.status.showMessage("Checking for updates...")
+            
+            def check_update():
+                try:
+                    response = requests.get(UPDATE_URL, timeout=10)
+                    if response.status_code == 200:
+                        update_info = response.text.strip()
+                        
+                        # Parse version info (assuming format: version|hash or just version)
+                        if '|' in update_info:
+                            latest_version, latest_hash = update_info.split('|', 1)
+                        else:
+                            latest_version = update_info
+                        
+                        # Compare versions
+                        if self._is_newer_version(latest_version, APP_VERSION):
+                            QMetaObject.invokeMethod(self, '_show_update_available', 
+                                Qt.QueuedConnection, Q_ARG(str, latest_version))
+                        else:
+                            QMetaObject.invokeMethod(self, '_show_no_update', Qt.QueuedConnection)
+                    else:
+                        QMetaObject.invokeMethod(self, '_show_update_error', 
+                            Qt.QueuedConnection, Q_ARG(str, f"HTTP {response.status_code}"))
+                except Exception as e:
+                    QMetaObject.invokeMethod(self, '_show_update_error', 
+                        Qt.QueuedConnection, Q_ARG(str, str(e)))
+            
+            threading.Thread(target=check_update, daemon=True).start()
+            
+        except ImportError:
+            QtWidgets.QMessageBox.warning(self, "Update Check", "Update checking requires the 'requests' library.\n\nInstall it with: pip install requests")
+
+    def _is_newer_version(self, latest: str, current: str) -> bool:
+        """Compare version strings"""
+        try:
+            latest_parts = [int(x) for x in latest.split('.')]
+            current_parts = [int(x) for x in current.split('.')]
+            
+            # Pad shorter version with zeros
+            max_len = max(len(latest_parts), len(current_parts))
+            latest_parts.extend([0] * (max_len - len(latest_parts)))
+            current_parts.extend([0] * (max_len - len(current_parts)))
+            
+            return latest_parts > current_parts
+        except:
+            return False
+
+    def _show_update_available(self, version: str):
+        """Show update available dialog"""
+        self.status.showMessage('Ready')
+        
+        reply = QtWidgets.QMessageBox.question(
+            self, 
+            "Update Available",
+            f"A new version ({version}) is available!\n\nWould you like to download it?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        
+        if reply == QtWidgets.QMessageBox.Yes:
+            import webbrowser
+            webbrowser.open(f"{GITHUB_REPO}/releases/latest")
+
+    def _show_no_update(self):
+        """Show no update available dialog"""
+        self.status.showMessage('Ready')
+        QtWidgets.QMessageBox.information(self, "No Updates", "You are using the latest version!")
+
+    def _show_update_error(self, error: str):
+        """Show update check error dialog"""
+        self.status.showMessage('Ready')
+        QtWidgets.QMessageBox.warning(self, "Update Check Failed", f"Failed to check for updates: {error}")
 
     def _open_history(self):
         try:
@@ -642,6 +749,12 @@ class YouTubeDownloader(QMainWindow):
         self.lang_ar_action.triggered.connect(lambda: self._set_and_save_language('ar'))
         self.lang_ja_action.triggered.connect(lambda: self._set_and_save_language('ja'))
 
+
+        # Status bar
+        self.status = QtWidgets.QStatusBar(self)
+        self.setStatusBar(self.status)
+        self.status.showMessage(f'Ready | Cookies folder: {COOKIES_TEMP_DIR}')
+
     # (Preferences moved to Tools menu; Settings keeps theme & language only)
 
     # Tools menu: Convert (submenu), Download History, Preferences
@@ -658,8 +771,25 @@ class YouTubeDownloader(QMainWindow):
         pref_action.triggered.connect(self._open_preferences)
 
         # Help
-        help_action = help_menu.addAction(self._tr('about'))
-        help_action.triggered.connect(lambda: self._show_coming_soon(self._tr('about')))
+        # help_action = help_menu.addAction(self._tr('about'))
+        # help_action.triggered.connect(lambda: self._show_coming_soon(self._tr('about')))
+        
+        about_action = QAction('&About', self)
+        about_action.setStatusTip('About this application')
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
+
+		
+        documentation_action = QAction('&Documentation', self)
+        documentation_action.setStatusTip('Open documentation')
+        documentation_action.triggered.connect(self._show_documentation)
+        help_menu.addAction(documentation_action)
+		
+        update_action = QAction('Check for &Updates', self)
+        update_action.setStatusTip('Check for application updates')
+        update_action.triggered.connect(self._check_for_updates)
+        help_menu.addAction(update_action)
+
 
         # Batch download button
         self.batch_btn = QPushButton(self._tr('batch_download'))

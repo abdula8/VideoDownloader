@@ -8,7 +8,8 @@ from pathlib import Path
 current_dir = Path.cwd()
 
 # Define the main script
-main_script = 'main_V3.py'
+# main_script = 'main_V3.py'
+main_script = 'main_app.py'
 
 # Define data files to include
 datas = [

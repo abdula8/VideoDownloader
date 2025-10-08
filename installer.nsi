@@ -3,7 +3,7 @@
 ; Created by build system
 
 !define APPNAME "Video Downloader"
-!define COMPANYNAME "VTools"
+!define COMPANYNAME "Abdullah Atef"
 !define DESCRIPTION "Video Downloader with Authentication and Cookie Management"
 !define VERSIONMAJOR 1
 !define VERSIONMINOR 0

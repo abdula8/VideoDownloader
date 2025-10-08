@@ -1,9 +1,11 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
-                             QWidget, QLabel, QStackedWidget)
+                             QWidget, QLabel, QStackedWidget, QFileDialog, QMessageBox)
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtGui import QFont
 import subprocess
+import socket
+import psutil
 
 from converter_tool import BasicConverterDialog, AdvancedConverterDialog
 from main_V3 import YouTubeDownloader
@@ -208,10 +210,27 @@ class MainWindow(QMainWindow):
         # Converter button
         self.converter_button = QPushButton("🔄 Converter")
         self.converter_button.setFixedSize(300, 60)
-        self.style_button(self.converter_button, "#2196F3", "#1976D2")
+        self.style_button(self.converter_button, "#2196F3", "#1e88e5")
         self.converter_button.setFont(QFont("Arial", 16, QFont.Bold))
         self.converter_button.clicked.connect(self.show_converter_window)
         buttons_layout.addWidget(self.converter_button, alignment=Qt.AlignCenter)
+        
+        # Share Folder button
+        self.share_button = QPushButton("📤 Share Folder")
+        self.share_button.setFixedSize(300, 60)
+        self.style_button(self.share_button, "#FF9800", "#f57c00")
+        self.share_button.setFont(QFont("Arial", 16, QFont.Bold))
+        self.share_button.clicked.connect(self.run_file_server)
+        buttons_layout.addWidget(self.share_button, alignment=Qt.AlignCenter)
+        
+        # Stop Server button (disabled by default)
+        self.stop_button = QPushButton("⏹ Stop Server")
+        self.stop_button.setFixedSize(300, 60)
+        self.style_button(self.stop_button, "#F44336", "#d32f2f")
+        self.stop_button.setFont(QFont("Arial", 16, QFont.Bold))
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.stop_file_server)
+        buttons_layout.addWidget(self.stop_button, alignment=Qt.AlignCenter)
         
         # Center buttons
         main_layout.addWidget(buttons_container, alignment=Qt.AlignCenter)
@@ -228,6 +247,9 @@ class MainWindow(QMainWindow):
         # Converter window
         self.converter_window = ConverterWindow(self.stacked_widget, self)
         self.stacked_widget.addWidget(self.converter_window)
+        
+        # Store server process
+        self.server_process = None
     
     def style_button(self, button, base_color, hover_color):
         """Apply modern stylesheet"""
@@ -249,6 +271,11 @@ class MainWindow(QMainWindow):
             QPushButton:pressed {{
                 background-color: {hover_color};
                 border: 2px solid {hover_color}80;
+            }}
+            QPushButton:disabled {{
+                background: #666666;
+                border: 2px solid #444444;
+                color: #aaaaaa;
             }}
         """)
 
@@ -272,6 +299,73 @@ class MainWindow(QMainWindow):
             self.downloader_win.show()
         except Exception as e:
             print(f"Error running downloader: {e}")
+
+    def run_file_server(self):
+        print("Share Folder button clicked")
+        folder = QFileDialog.getExistingDirectory(self, "Choose Folder to Share", "")
+        if folder:
+            try:
+                # Check if port 8010 is in use
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                result = sock.connect_ex(('localhost', 8010))
+                if result == 0:
+                    raise Exception("Port 8010 is already in use. Please stop the current server or use a different port.")
+                sock.close()
+
+                local_ip = self.get_active_physical_ip()
+
+                # Start server with all interfaces (0.0.0.0) for network access
+                self.server_process = subprocess.Popen(
+                    [sys.executable, '-m', 'http.server', '8010', '--bind', '0.0.0.0', '--directory', folder],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+                )
+                self.stop_button.setEnabled(True)  # Enable stop button
+
+                msg = f"Server started for folder: {folder}\n\n"
+                msg += "To access:\n"
+                msg += f" - On this PC: http://localhost:8010\n"
+                msg += f" - On other devices in the same network: http://{local_ip}:8010\n\n"
+                msg += "Note: Keep the application running to maintain the server.\n"
+                msg += "Click 'Stop Server' to terminate the server."
+                QMessageBox.information(self, "Folder Sharing Started", msg)
+            except Exception as e:
+                print(f"Error starting server: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to start server: {e}")
+                self.server_process = None
+
+    def get_active_physical_ip(self):
+        """Get the IP address of the active physical interface (Wi-Fi or Ethernet)."""
+        try:
+            # Create a temporary UDP socket to get the default route interface IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            # Fallback to localhost if no network
+            return "127.0.0.1"
+
+    def stop_file_server(self):
+        print("Stop Server button clicked")
+        if self.server_process:
+            try:
+                parent = psutil.Process(self.server_process.pid)
+                for child in parent.children(recursive=True):
+                    child.kill()
+                parent.kill()
+                self.server_process.wait(timeout=5)
+                self.server_process = None
+                self.stop_button.setEnabled(False)
+                QMessageBox.information(self, "Server Stopped", "The file server has been stopped.")
+            except Exception as e:
+                print(f"Error stopping server: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to stop server: {e}")
+        else:
+            QMessageBox.warning(self, "No Server Running", "No server is currently running.")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
